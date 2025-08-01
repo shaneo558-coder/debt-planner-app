@@ -21,7 +21,7 @@ else:
 st.success(f"Estimated Monthly Income: ${monthly_income:.2f}")
 
 # --- Monthly Expenses ---
-st.header("💿 Monthly Expenses")
+st.header("🧾 Monthly Expenses")
 expense_items = [
     "Rent/Mortgage", "Groceries", "Electricity", "Gas", "Water", "Sewer",
     "Trash Pickup", "Heating Oil", "Car Payment", "Fuel/Gas", "Public Transit",
@@ -59,12 +59,13 @@ monthly_debt_total = debt_df["Monthly Payment"].sum() if not debt_df.empty else 
 # --- Summary Section ---
 st.header("📊 Summary")
 
-discretionary_income = monthly_income - total_expenses - monthly_debt_total
+total_outflow = total_expenses + monthly_debt_total
+discretionary_income = monthly_income - total_outflow
 dti = (monthly_debt_total / monthly_income) * 100 if monthly_income > 0 else 0
 
 st.markdown(f"""
 - ✅ **Monthly Income:** ${monthly_income:,.2f}  
-- ✅ **Monthly Debt Payments:** ${monthly_debt_total:,.2f}  
+- ✅ **Total Monthly Outflow (Expenses + Debts):** ${total_outflow:,.2f}  
 - ✅ **Debt-to-Income Ratio:** {dti:.2f}%  
 - ✅ **Discretionary Income:** ${discretionary_income:,.2f}
 """)
@@ -100,7 +101,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.markdown("### Build me a zero-based budget I can actually stick to.")
     zero_base = {
-        "Needs": total_expenses + monthly_debt_total,
+        "Needs": total_outflow,
         "Discretionary": discretionary_income if discretionary_income > 0 else 0
     }
     st.write(zero_base)
@@ -133,4 +134,4 @@ else:
 
 # --- Footer ---
 st.markdown("---")
-st.caption("Built by Shane")
+st.caption("Built by Shane using Streamlit")
