@@ -2,123 +2,135 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 
+# --- Title ---
 st.set_page_config(page_title="Debt Payoff Planner", layout="wide")
 st.title("💰 Debt Payoff & Budget Planner")
 
-# --- Session State ---
-if "debts" not in st.session_state:
-    st.session_state.debts = []
-
-# --- Reset Function ---
-def reset_form():
-    st.session_state.debts = []
-    st.experimental_rerun()
-
-# --- Income Input ---
+# --- Monthly Income ---
 st.header("💵 Monthly Income")
-income_freq = st.selectbox("How are you paid?", ["Monthly", "Biweekly", "Weekly"])
-income_amount = st.number_input("Enter your paycheck amount", min_value=0.0, step=10.0, format="%.2f")
+freq = st.selectbox("How are you paid?", ["Monthly", "Biweekly", "Weekly"])
+income = st.number_input("Enter your paycheck amount", min_value=0.0, step=10.0, value=0.0)
 
-if income_freq == "Weekly":
-    monthly_income = income_amount * 52 / 12
-elif income_freq == "Biweekly":
-    monthly_income = income_amount * 26 / 12
+if freq == "Weekly":
+    monthly_income = income * 52 / 12
+elif freq == "Biweekly":
+    monthly_income = income * 26 / 12
 else:
-    monthly_income = income_amount
+    monthly_income = income
 
 st.success(f"Estimated Monthly Income: ${monthly_income:.2f}")
 
-# --- Expenses ---
-st.header("🧾 Monthly Expenses")
-expense_categories = [
-    "Rent/Mortgage", "Groceries", "Electricity", "Gas", "Water", "Sewer",
-    "Trash Pickup", "Heating Oil", "Car Payment", "Fuel/Gas", "Public Transit",
-    "Rideshare", "Parking", "Health Insurance", "Auto Insurance",
-    "Home/Renters Insurance", "Life Insurance", "Phone", "Internet",
-    "Netflix", "Hulu", "Disney+", "Amazon Prime Video", "HBO Max"
-]
+# --- Monthly Expenses ---
+st.header("💿 Monthly Expenses")
 
 expenses = {}
-cols = st.columns(3)
-for idx, category in enumerate(expense_categories):
-    with cols[idx % 3]:
-        expenses[category] = st.number_input(f"{category}", min_value=0.0, step=5.0, format="%.2f", key=category)
 
+def add_expense(category):
+    expenses[category] = st.number_input(f"{category} ($)", min_value=0.0, step=5.0, value=0.0, key=category)
+
+# Basic expenses
+add_expense("Rent/Mortgage")
+add_expense("Groceries")
+
+# Utilities toggle
+if st.checkbox("Do you pay for Utilities?"):
+    for item in ["Electricity", "Gas", "Water", "Sewer", "Trash Pickup", "Heating Oil"]:
+        add_expense(item)
+
+# Transportation toggle
+if st.checkbox("Do you have Transportation costs?"):
+    for item in ["Car Payment", "Fuel/Gas", "Public Transit", "Rideshare", "Parking"]:
+        add_expense(item)
+
+# Insurance toggle
+if st.checkbox("Do you pay for Insurance?"):
+    for item in ["Health Insurance", "Auto Insurance", "Home/Renters Insurance", "Life Insurance"]:
+        add_expense(item)
+
+# Phone/Internet
+add_expense("Phone")
+add_expense("Internet")
+
+# Streaming toggle
+if st.checkbox("Do you subscribe to any Streaming Services?"):
+    for item in ["Netflix", "Hulu", "Disney+", "Amazon Prime Video", "HBO Max"]:
+        add_expense(item)
+
+# Calculate total expenses
 total_expenses = sum(expenses.values())
 st.success(f"Total Monthly Expenses: ${total_expenses:.2f}")
 
 # --- Debts ---
 st.header("💳 Debts")
+num_debts = st.number_input("How many separate debts would you like to enter?", min_value=1, max_value=50, step=1)
+st.caption("We’ll guide you through each one step by step after you enter the total.")
 
-def add_debt():
-    st.session_state.debts.append({"name": "", "monthly_payment": 0.0, "total_owed": 0.0, "apr": 0.0})
+debts = []
+for i in range(int(num_debts)):
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        name = st.text_input(f"Debt {i+1} Name", key=f"name_{i}")
+    with col2:
+        monthly_payment = st.number_input(f"Monthly Payment for {name}", key=f"payment_{i}", value=0.0)
+    with col3:
+        total_owed = st.number_input(f"Total Owed on {name}", key=f"owed_{i}", value=0.0)
+    debts.append({"Item": name, "Monthly Payment": monthly_payment, "Total Owed": total_owed})
 
-if st.button("➕ Add Another Debt"):
-    add_debt()
+debt_df = pd.DataFrame(debts)
+monthly_debt_total = debt_df["Monthly Payment"].sum() if not debt_df.empty else 0.0
 
-updated_debts = []
-for i, debt in enumerate(st.session_state.debts):
-    cols = st.columns(4)
-    with cols[0]:
-        name = st.text_input(f"Debt {i+1} Name", value=debt["name"], key=f"name_{i}")
-    with cols[1]:
-        monthly_payment = st.number_input(f"Monthly Payment", value=debt["monthly_payment"], key=f"payment_{i}", format="%.2f")
-    with cols[2]:
-        total_owed = st.number_input(f"Total Owed", value=debt["total_owed"], key=f"owed_{i}", format="%.2f")
-    with cols[3]:
-        apr = st.number_input(f"APR (%)", value=debt["apr"], key=f"apr_{i}", format="%.2f")
-    
-    updated_debts.append({
-        "name": name,
-        "monthly_payment": monthly_payment,
-        "total_owed": total_owed,
-        "apr": apr
-    })
-
-st.session_state.debts = updated_debts
-
-# --- Calculations ---
+# --- Summary Section ---
 st.header("📊 Summary")
 
-debt_df = pd.DataFrame(st.session_state.debts)
-if not debt_df.empty and not debt_df["monthly_payment"].isnull().all():
-    debt_df = debt_df[debt_df["monthly_payment"] > 0]
-    debt_df["Estimated Payoff Date"] = debt_df.apply(
-        lambda row: (datetime.today() + timedelta(days=(row["total_owed"] / row["monthly_payment"]) * 30)).strftime('%Y-%m')
-        if row["monthly_payment"] > 0 else "N/A", axis=1
-    )
-
-    total_debt_payment = debt_df["monthly_payment"].sum()
-else:
-    total_debt_payment = 0.0
-
-total_outflow = total_debt_payment + total_expenses
+total_outflow = total_expenses + monthly_debt_total
 discretionary_income = monthly_income - total_outflow
-dti = (total_outflow / monthly_income * 100) if monthly_income > 0 else 0
+dti = (total_outflow / monthly_income) * 100 if monthly_income > 0 else 0
 
 st.markdown(f"""
 - ✅ **Monthly Income:** ${monthly_income:,.2f}  
-- ✅ **Total Monthly Outflow (Debts + Expenses):** ${total_outflow:,.2f}  
-- ✅ **Debt-to-Income Ratio (DTI):** {dti:.2f}%  
+- ✅ **Total Monthly Outflow (Expenses + Debts):** ${total_outflow:,.2f}  
+- ✅ **Debt-to-Income Ratio:** {dti:.2f}%  
 - ✅ **Discretionary Income:** ${discretionary_income:,.2f}
 """)
 
-if not debt_df.empty:
-    st.subheader("📅 Debt Details with Payoff Forecast")
-    debt_df_display = debt_df.rename(columns={
-        "name": "Debt Name",
-        "monthly_payment": "Monthly Payment ($)",
-        "total_owed": "Total Owed ($)",
-        "apr": "APR (%)"
-    })
-    st.dataframe(debt_df_display[["Debt Name", "Monthly Payment ($)", "Total Owed ($)", "APR (%)", "Estimated Payoff Date"]])
+# --- Avalanche or Snowball Recommendation ---
+st.subheader("📌 Payoff Strategy Recommendation")
 
-# --- Reset ---
+if not debt_df.empty and len(debt_df) > 1:
+    max_total = debt_df["Total Owed"].max()
+
+    if max_total > 2 * debt_df["Total Owed"].mean():
+        strategy = "Snowball"
+        reason = "You have one or more large debts. Snowball helps build momentum by clearing small balances first."
+    else:
+        strategy = "Avalanche"
+        reason = "Your debts are relatively balanced. Avalanche saves more on interest by targeting high APRs first."
+
+    st.info(f"**Recommended Strategy:** {strategy}")
+    st.write(reason)
+
+    st.expander("ℹ️ Strategy Breakdown").markdown("""
+    - **Avalanche Method**: Pay off the debt with the **highest interest rate first**, saving the most money in the long run.
+    - **Snowball Method**: Pay off the **smallest balance first**, creating quick wins and motivation to stay on track.
+    """)
+else:
+    st.warning("Enter at least 2 debts to get a payoff strategy recommendation.")
+
+# --- Expense Table ---
+st.subheader("📈 Expense Breakdown Table")
+
+if sum(expenses.values()) > 0:
+    expense_df = pd.DataFrame({
+        "Category": expenses.keys(),
+        "Amount ($)": expenses.values()
+    }).sort_values(by="Amount ($)", ascending=False)
+
+    expense_df["% of Total"] = (expense_df["Amount ($)"] / total_expenses * 100).round(2).astype(str) + '%'
+
+    st.dataframe(expense_df.reset_index(drop=True))
+else:
+    st.warning("No expenses entered to display.")
+
+# --- Footer ---
 st.markdown("---")
-if st.button("🔁 Reset Form"):
-    reset_form()
-
-st.caption("Built with ❤️ using Streamlit")
-
-
-
+st.caption("Built by Shane")
