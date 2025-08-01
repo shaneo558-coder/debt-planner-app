@@ -22,15 +22,16 @@ st.success(f"Estimated Monthly Income: ${monthly_income:.2f}")
 
 # --- Monthly Expenses ---
 st.header("💿 Monthly Expenses")
-
 expenses = {}
 
 def add_expense(category):
     expenses[category] = st.number_input(f"{category} ($)", min_value=0.0, step=5.0, value=0.0, key=category)
 
-# Basic expenses
+# Basic essentials
 add_expense("Rent/Mortgage")
 add_expense("Groceries")
+add_expense("Phone")
+add_expense("Internet")
 
 # Utilities toggle
 if st.checkbox("Do you pay for Utilities?"):
@@ -46,10 +47,6 @@ if st.checkbox("Do you have Transportation costs?"):
 if st.checkbox("Do you pay for Insurance?"):
     for item in ["Health Insurance", "Auto Insurance", "Home/Renters Insurance", "Life Insurance"]:
         add_expense(item)
-
-# Phone/Internet
-add_expense("Phone")
-add_expense("Internet")
 
 # Streaming toggle
 if st.checkbox("Do you subscribe to any Streaming Services?"):
@@ -81,7 +78,6 @@ monthly_debt_total = debt_df["Monthly Payment"].sum() if not debt_df.empty else 
 
 # --- Summary Section ---
 st.header("📊 Summary")
-
 total_outflow = total_expenses + monthly_debt_total
 discretionary_income = monthly_income - total_outflow
 dti = (total_outflow / monthly_income) * 100 if monthly_income > 0 else 0
@@ -95,10 +91,8 @@ st.markdown(f"""
 
 # --- Avalanche or Snowball Recommendation ---
 st.subheader("📌 Payoff Strategy Recommendation")
-
 if not debt_df.empty and len(debt_df) > 1:
     max_total = debt_df["Total Owed"].max()
-
     if max_total > 2 * debt_df["Total Owed"].mean():
         strategy = "Snowball"
         reason = "You have one or more large debts. Snowball helps build momentum by clearing small balances first."
@@ -109,24 +103,23 @@ if not debt_df.empty and len(debt_df) > 1:
     st.info(f"**Recommended Strategy:** {strategy}")
     st.write(reason)
 
-    st.expander("ℹ️ Strategy Breakdown").markdown("""
-    - **Avalanche Method**: Pay off the debt with the **highest interest rate first**, saving the most money in the long run.
-    - **Snowball Method**: Pay off the **smallest balance first**, creating quick wins and motivation to stay on track.
-    """)
+    with st.expander("ℹ️ Strategy Breakdown"):
+        st.markdown("""
+        - **Avalanche Method**: Pay off the debt with the **highest interest rate first**, saving the most money in the long run.  
+        - **Snowball Method**: Pay off the **smallest balance first**, creating quick wins and motivation to stay on track.
+        """)
 else:
     st.warning("Enter at least 2 debts to get a payoff strategy recommendation.")
 
 # --- Expense Table ---
 st.subheader("📈 Expense Breakdown Table")
-
-if sum(expenses.values()) > 0:
+if expenses:
     expense_df = pd.DataFrame({
         "Category": expenses.keys(),
         "Amount ($)": expenses.values()
     }).sort_values(by="Amount ($)", ascending=False)
 
     expense_df["% of Total"] = (expense_df["Amount ($)"] / total_expenses * 100).round(2).astype(str) + '%'
-
     st.dataframe(expense_df.reset_index(drop=True))
 else:
     st.warning("No expenses entered to display.")
