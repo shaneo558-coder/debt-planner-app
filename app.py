@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
 
 # --- Title ---
 st.set_page_config(page_title="Debt Payoff Planner", layout="wide")
@@ -59,8 +58,8 @@ st.success(f"Total Monthly Expenses: ${total_expenses:.2f}")
 
 # --- Debts ---
 st.header("💳 Debts")
-num_debts = st.number_input("How many debts or credit accounts would you like to add?", min_value=1, max_value=50, step=1)
-st.caption("We’ll walk you through each account after you enter the number.")
+num_debts = st.number_input("How many separate debts would you like to enter?", min_value=1, max_value=50, step=1)
+st.caption("We’ll guide you through each one step by step after you enter the total.")
 
 debts = []
 for i in range(int(num_debts)):
@@ -104,7 +103,7 @@ if not debt_df.empty and len(debt_df) > 1:
     st.write(reason)
 
     with st.expander("ℹ️ Strategy Breakdown"):
-        st.markdown("""  
+        st.markdown("""
         - **Avalanche Method**: Pay off the debt with the **highest interest rate first**, saving the most money in the long run.  
         - **Snowball Method**: Pay off the **smallest balance first**, creating quick wins and motivation to stay on track.
         """)
@@ -127,5 +126,3 @@ else:
 # --- Footer ---
 st.markdown("---")
 st.caption("Built by Shane")
-
-
