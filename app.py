@@ -21,7 +21,7 @@ else:
 st.success(f"Estimated Monthly Income: ${monthly_income:.2f}")
 
 # --- Monthly Expenses ---
-st.header("🧾 Monthly Expenses")
+st.header("💿 Monthly Expenses")
 expense_items = [
     "Rent/Mortgage", "Groceries", "Electricity", "Gas", "Water", "Sewer",
     "Trash Pickup", "Heating Oil", "Car Payment", "Fuel/Gas", "Public Transit",
@@ -59,14 +59,13 @@ monthly_debt_total = debt_df["Monthly Payment"].sum() if not debt_df.empty else 
 # --- Summary Section ---
 st.header("📊 Summary")
 
-total_outflow = total_expenses + monthly_debt_total
-discretionary_income = monthly_income - total_outflow
-dti = (total_outflow / monthly_income) * 100 if monthly_income > 0 else 0
+discretionary_income = monthly_income - total_expenses - monthly_debt_total
+dti = (monthly_debt_total / monthly_income) * 100 if monthly_income > 0 else 0
 
 st.markdown(f"""
 - ✅ **Monthly Income:** ${monthly_income:,.2f}  
-- ✅ **Total Monthly Outflow (Expenses + Debts):** ${total_outflow:,.2f}  
-- ✅ **Debt-to-Income Ratio (Total Outflow ÷ Income):** {dti:.2f}%  
+- ✅ **Monthly Debt Payments:** ${monthly_debt_total:,.2f}  
+- ✅ **Debt-to-Income Ratio:** {dti:.2f}%  
 - ✅ **Discretionary Income:** ${discretionary_income:,.2f}
 """)
 
@@ -93,6 +92,30 @@ if not debt_df.empty and len(debt_df) > 1:
 else:
     st.warning("Enter at least 2 debts to get a payoff strategy recommendation.")
 
+# --- Budgeting Options ---
+st.subheader("📋 Budget Planning")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("### Build me a zero-based budget I can actually stick to.")
+    zero_base = {
+        "Needs": total_expenses + monthly_debt_total,
+        "Discretionary": discretionary_income if discretionary_income > 0 else 0
+    }
+    st.write(zero_base)
+
+with col2:
+    st.markdown("### Split my income using the 50/30/20 rule.")
+    needs = monthly_income * 0.5
+    wants = monthly_income * 0.3
+    savings = monthly_income * 0.2
+    st.write({
+        "Needs (50%)": f"${needs:.2f}",
+        "Wants (30%)": f"${wants:.2f}",
+        "Savings/Debt (20%)": f"${savings:.2f}"
+    })
+
 # --- Expense Table Instead of Pie Chart ---
 st.subheader("📈 Expense Breakdown Table")
 
@@ -110,4 +133,4 @@ else:
 
 # --- Footer ---
 st.markdown("---")
-st.caption("Built by Shane using Streamlit")
+st.caption("Built by Shane")
