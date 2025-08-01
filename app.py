@@ -59,18 +59,18 @@ st.success(f"Total Monthly Expenses: ${total_expenses:.2f}")
 
 # --- Debts ---
 st.header("💳 Debts")
-num_debts = st.number_input("How many separate debts would you like to enter?", min_value=1, max_value=50, step=1)
-st.caption("We’ll guide you through each one step by step after you enter the total.")
+num_debts = st.number_input("How many debts or credit accounts would you like to add?", min_value=1, max_value=50, step=1)
+st.caption("We’ll walk you through each account after you enter the number.")
 
 debts = []
 for i in range(int(num_debts)):
     col1, col2, col3 = st.columns(3)
     with col1:
-        name = st.text_input(f"Debt {i+1} Name", key=f"name_{i}")
+        name = st.text_input(f"Name of Debt #{i+1} (e.g., Capital One)", key=f"name_{i}")
     with col2:
-        monthly_payment = st.number_input(f"Monthly Payment for {name}", key=f"payment_{i}", value=0.0)
+        monthly_payment = st.number_input(f"Monthly Payment Amount for Debt #{i+1} ($)", key=f"payment_{i}", value=0.0)
     with col3:
-        total_owed = st.number_input(f"Total Owed on {name}", key=f"owed_{i}", value=0.0)
+        total_owed = st.number_input(f"Current Balance Owed on Debt #{i+1} ($)", key=f"owed_{i}", value=0.0)
     debts.append({"Item": name, "Monthly Payment": monthly_payment, "Total Owed": total_owed})
 
 debt_df = pd.DataFrame(debts)
@@ -104,7 +104,7 @@ if not debt_df.empty and len(debt_df) > 1:
     st.write(reason)
 
     with st.expander("ℹ️ Strategy Breakdown"):
-        st.markdown("""
+        st.markdown("""  
         - **Avalanche Method**: Pay off the debt with the **highest interest rate first**, saving the most money in the long run.  
         - **Snowball Method**: Pay off the **smallest balance first**, creating quick wins and motivation to stay on track.
         """)
@@ -127,3 +127,5 @@ else:
 # --- Footer ---
 st.markdown("---")
 st.caption("Built by Shane")
+
+
