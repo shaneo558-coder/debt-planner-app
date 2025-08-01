@@ -9,7 +9,7 @@ st.title("💰 Debt Payoff & Budget Planner")
 # --- Monthly Income ---
 st.header("💵 Monthly Income")
 freq = st.selectbox("How are you paid?", ["Monthly", "Biweekly", "Weekly"])
-income = st.number_input("Enter your paycheck amount", min_value=0.0, step=10.0)
+income = st.number_input("Enter your paycheck amount", min_value=0.0, step=10.0, value=0.0)
 
 if freq == "Weekly":
     monthly_income = income * 52 / 12
@@ -22,18 +22,41 @@ st.success(f"Estimated Monthly Income: ${monthly_income:.2f}")
 
 # --- Monthly Expenses ---
 st.header("💿 Monthly Expenses")
-expense_items = [
-    "Rent/Mortgage", "Groceries", "Electricity", "Gas", "Water", "Sewer",
-    "Trash Pickup", "Heating Oil", "Car Payment", "Fuel/Gas", "Public Transit",
-    "Rideshare", "Parking", "Health Insurance", "Auto Insurance",
-    "Home/Renters Insurance", "Life Insurance", "Phone", "Internet",
-    "Netflix", "Hulu", "Disney+", "Amazon Prime Video", "HBO Max"
-]
 
 expenses = {}
-for item in expense_items:
-    expenses[item] = st.number_input(f"{item} ($)", min_value=0.0, step=5.0, key=item)
 
+def add_expense(category):
+    expenses[category] = st.number_input(f"{category} ($)", min_value=0.0, step=5.0, value=0.0, key=category)
+
+# Basic expenses
+add_expense("Rent/Mortgage")
+add_expense("Groceries")
+
+# Utilities toggle
+if st.checkbox("Do you pay for Utilities?"):
+    for item in ["Electricity", "Gas", "Water", "Sewer", "Trash Pickup", "Heating Oil"]:
+        add_expense(item)
+
+# Transportation toggle
+if st.checkbox("Do you have Transportation costs?"):
+    for item in ["Car Payment", "Fuel/Gas", "Public Transit", "Rideshare", "Parking"]:
+        add_expense(item)
+
+# Insurance toggle
+if st.checkbox("Do you pay for Insurance?"):
+    for item in ["Health Insurance", "Auto Insurance", "Home/Renters Insurance", "Life Insurance"]:
+        add_expense(item)
+
+# Phone/Internet
+add_expense("Phone")
+add_expense("Internet")
+
+# Streaming toggle
+if st.checkbox("Do you subscribe to any Streaming Services?"):
+    for item in ["Netflix", "Hulu", "Disney+", "Amazon Prime Video", "HBO Max"]:
+        add_expense(item)
+
+# Calculate total expenses
 total_expenses = sum(expenses.values())
 st.success(f"Total Monthly Expenses: ${total_expenses:.2f}")
 
@@ -48,9 +71,9 @@ for i in range(int(num_debts)):
     with col1:
         name = st.text_input(f"Debt {i+1} Name", key=f"name_{i}")
     with col2:
-        monthly_payment = st.number_input(f"Monthly Payment for {name}", key=f"payment_{i}")
+        monthly_payment = st.number_input(f"Monthly Payment for {name}", key=f"payment_{i}", value=0.0)
     with col3:
-        total_owed = st.number_input(f"Total Owed on {name}", key=f"owed_{i}")
+        total_owed = st.number_input(f"Total Owed on {name}", key=f"owed_{i}", value=0.0)
     debts.append({"Item": name, "Monthly Payment": monthly_payment, "Total Owed": total_owed})
 
 debt_df = pd.DataFrame(debts)
@@ -59,12 +82,13 @@ monthly_debt_total = debt_df["Monthly Payment"].sum() if not debt_df.empty else 
 # --- Summary Section ---
 st.header("📊 Summary")
 
-discretionary_income = monthly_income - total_expenses - monthly_debt_total
-dti = (monthly_debt_total / monthly_income) * 100 if monthly_income > 0 else 0
+total_outflow = total_expenses + monthly_debt_total
+discretionary_income = monthly_income - total_outflow
+dti = (total_outflow / monthly_income) * 100 if monthly_income > 0 else 0
 
 st.markdown(f"""
 - ✅ **Monthly Income:** ${monthly_income:,.2f}  
-- ✅ **Monthly Debt Payments:** ${monthly_debt_total:,.2f}  
+- ✅ **Total Monthly Outflow (Expenses + Debts):** ${total_outflow:,.2f}  
 - ✅ **Debt-to-Income Ratio:** {dti:.2f}%  
 - ✅ **Discretionary Income:** ${discretionary_income:,.2f}
 """)
@@ -92,31 +116,7 @@ if not debt_df.empty and len(debt_df) > 1:
 else:
     st.warning("Enter at least 2 debts to get a payoff strategy recommendation.")
 
-# --- Budgeting Options ---
-st.subheader("📋 Budget Planning")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("### Build me a zero-based budget I can actually stick to.")
-    zero_base = {
-        "Needs": total_expenses + monthly_debt_total,
-        "Discretionary": discretionary_income if discretionary_income > 0 else 0
-    }
-    st.write(zero_base)
-
-with col2:
-    st.markdown("### Split my income using the 50/30/20 rule.")
-    needs = monthly_income * 0.5
-    wants = monthly_income * 0.3
-    savings = monthly_income * 0.2
-    st.write({
-        "Needs (50%)": f"${needs:.2f}",
-        "Wants (30%)": f"${wants:.2f}",
-        "Savings/Debt (20%)": f"${savings:.2f}"
-    })
-
-# --- Expense Table Instead of Pie Chart ---
+# --- Expense Table ---
 st.subheader("📈 Expense Breakdown Table")
 
 if sum(expenses.values()) > 0:
