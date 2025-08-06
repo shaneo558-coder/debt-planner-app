@@ -11,7 +11,8 @@ def reset_form():
 
 def export_excel(expenses_df, debts_df):
     buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+    # Switched to openpyxl (built-in) to avoid missing xlsxwriter on Streamlit Cloud
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         expenses_df.to_excel(writer, sheet_name='Expenses', index=False)
         debts_df.to_excel(writer, sheet_name='Debts', index=False)
     data = buffer.getvalue()
@@ -126,7 +127,7 @@ st.markdown(f"""
 - ✅ **Monthly Income:** ${monthly_income:,.2f}  
 - ✅ **Total Monthly Outflow:** ${total_outflow:,.2f}  
 - ✅ **Debt-to-Income Ratio:** {dti:.2f}%  
-- ✅ **Discretionary Income:** ${discretionary:.2f}
+- ✅ **Discretionary Income:** ${discretionary:,.2f}
 """)
 
 # --- Strategy & Timeline ---
@@ -163,3 +164,4 @@ export_excel(expense_df, debt_df)
 # --- Footer ---
 st.markdown("---")
 st.caption("Built by Shane")
+
