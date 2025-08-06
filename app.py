@@ -3,23 +3,13 @@ import pandas as pd
 import math
 import io
 import os
-import gspread
-from google.oauth2.service_account import Credentials
-
-# --- Google Sheets Setup ---
-creds = Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"],
-    scopes=["https://www.googleapis.com/auth/spreadsheets"]
-)
-gc = gspread.authorize(creds)
-sheet = gc.open_by_key(st.secrets["sheet_id"]).sheet1
 
 # --- Helper function for Excel export ---
 def export_excel(expenses_df, debts_df):
     buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        expenses_df.to_excel(writer, sheet_name="Expenses", index=False)
-        debts_df.to_excel(writer, sheet_name="Debts", index=False)
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        expenses_df.to_excel(writer, sheet_name='Expenses', index=False)
+        debts_df.to_excel(writer, sheet_name='Debts', index=False)
     data = buffer.getvalue()
     st.download_button(
         label="📥 Download Excel Report",
@@ -41,7 +31,12 @@ with st.sidebar.form("signup_form", clear_on_submit=True):
         if not name or not email:
             st.error("Please enter both name and email.")
         else:
-            sheet.append_row([name, email])
+            csv_path = "signups.csv"
+            write_header = not os.path.exists(csv_path)
+            with open(csv_path, "a") as f:
+                if write_header:
+                    f.write("Name,Email\n")
+                f.write(f"{name},{email}\n")
             st.success("Thanks for signing up! 🎉")
 
 # --- Monthly Income ---
@@ -55,6 +50,7 @@ elif freq == "Biweekly":
 else:
     monthly_income = base_income
 
+# Other income sources
 if st.checkbox("➕ Add other income sources?"):
     n_other = st.number_input("How many other income sources?", min_value=1, max_value=10, step=1, key="n_other")
     for i in range(int(n_other)):
@@ -70,9 +66,13 @@ expenses = {}
 def add_expense(cat):
     expenses[cat] = st.number_input(f"{cat} ($)", min_value=0.0, step=5.0, value=0.0, key=cat)
 
-for cat in ["Rent/Mortgage", "Groceries", "Phone", "Internet"]:
-    add_expense(cat)
+# Core essentials
+add_expense("Rent/Mortgage")
+add_expense("Groceries")
+add_expense("Phone")
+add_expense("Internet")
 
+# Utilities with optional range
 use_range = st.checkbox("🔄 Use min/max range for Utilities?")
 if st.checkbox("Do you pay for Utilities?"):
     for u in ["Electricity","Gas","Water","Sewer","Trash Pickup","Heating Oil"]:
@@ -83,18 +83,22 @@ if st.checkbox("Do you pay for Utilities?"):
         else:
             add_expense(u)
 
+# Transportation
 if st.checkbox("🚗 Transportation costs?"):
     for t in ["Car Payment","Fuel/Gas","Public Transit","Rideshare","Parking"]:
         add_expense(t)
 
+# Insurance
 if st.checkbox("🛡️ Insurance?"):
     for ins in ["Health Insurance","Auto Insurance","Home/Renters Insurance","Life Insurance"]:
         add_expense(ins)
 
+# Streaming
 if st.checkbox("🎬 Streaming subscriptions?"):
     for s in ["Netflix","Hulu","Disney+","Amazon Prime Video","HBO Max"]:
         add_expense(s)
 
+# Other expenses
 if st.checkbox("➕ Add other expenses?"):
     n_exp = st.number_input("How many extra expense categories?", min_value=1, max_value=10, step=1, key="n_exp")
     for i in range(int(n_exp)):
@@ -109,13 +113,17 @@ st.success(f"Total Monthly Expenses: ${total_expenses:.2f}")
 st.header("💳 Debts")
 num_debts = st.number_input("How many debts?", min_value=1, max_value=50, step=1, key="num_debts")
 st.caption("Enter each debt’s name, payment, and balance:")
+
 debts = []
 for i in range(int(num_debts)):
     c1,c2,c3 = st.columns(3)
-    name = c1.text_input(f"Name of Debt #{i+1}", key=f"name_{i}")
-    pay  = c2.number_input(f"Monthly Payment for {name} ($)", min_value=0.0, step=5.0, value=0.0, key=f"pay_{i}")
-    owed = c3.number_input(f"Total Owed on {name} ($)", min_value=0.0, step=5.0, value=0.0, key=f"owed_{i}")
-    months = math.ceil(owed / pay) if pay > 0 else 0
+    with c1:
+        name = st.text_input(f"Name of Debt #{i+1}", key=f"name_{i}")
+    with c2:
+        pay  = st.number_input(f"Monthly Payment for {name} ($)", min_value=0.0, step=5.0, value=0.0, key=f"pay_{i}")
+    with c3:
+        owed = st.number_input(f"Total Owed on {name} ($)", min_value=0.0, step=5.0, value=0.0, key=f"owed_{i}")
+    months = math.ceil(owed / pay) if pay>0 else 0
     debts.append({"Item": name, "Monthly Payment": pay, "Total Owed": owed, "Payoff Months": months})
 
 debt_df = pd.DataFrame(debts)
@@ -123,9 +131,9 @@ monthly_debt_total = debt_df["Monthly Payment"].sum()
 
 # --- Summary ---
 st.header("📊 Summary")
-total_outflow = total_expenses + monthly_debt_total
-discretionary = monthly_income - total_outflow
-dti           = (total_outflow / monthly_income * 100) if monthly_income else 0
+total_outflow   = total_expenses + monthly_debt_total
+discretionary   = monthly_income - total_outflow
+dti             = (total_outflow / monthly_income * 100) if monthly_income else 0
 
 st.markdown(f"""
 - ✅ **Monthly Income:** ${monthly_income:,.2f}  
@@ -138,13 +146,14 @@ st.markdown(f"""
 st.subheader("📌 Payoff Strategy & Timeline")
 if len(debts) > 1:
     max_bal = debt_df["Total Owed"].max()
-    strat, note = (
-        ("Snowball", "Clears small balances first for quick wins.")
-        if max_bal > 2 * debt_df["Total Owed"].mean()
-        else ("Avalanche", "Targets high-interest debts to save money.")
-    )
+    if max_bal > 2 * debt_df["Total Owed"].mean():
+        strat = "Snowball"
+        note  = "Clears small balances first for quick wins."
+    else:
+        strat = "Avalanche"
+        note  = "Targets high-interest debts to save money."
     st.info(f"**Strategy:** {strat} — {note}")
-    st.table(debt_df[["Item", "Payoff Months"]])
+    st.table(debt_df[["Item","Payoff Months"]])
 else:
     st.warning("Enter at least 2 debts for a strategy recommendation.")
 
