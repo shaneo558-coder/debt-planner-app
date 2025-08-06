@@ -1,127 +1,164 @@
 import streamlit as st
 import pandas as pd
+import math
+import io
 
-# --- Title ---
+# --- Helper functions ---
+def reset_form():
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.experimental_rerun()
+
+def export_excel(expenses_df, debts_df):
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        expenses_df.to_excel(writer, sheet_name='Expenses', index=False)
+        debts_df.to_excel(writer, sheet_name='Debts', index=False)
+    data = buffer.getvalue()
+    st.download_button(
+        label="📥 Download Excel Report",
+        data=data,
+        file_name="BudgetMap_Report.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+# --- Page config & reset ---
 st.set_page_config(page_title="Debt Payoff Planner", layout="wide")
-st.title("💰 Debt Payoff & Budget Planner")
+st.sidebar.button("🔄 Reset Form", on_click=reset_form)
 
 # --- Monthly Income ---
 st.header("💵 Monthly Income")
 freq = st.selectbox("How are you paid?", ["Monthly", "Biweekly", "Weekly"])
-income = st.number_input("Enter your paycheck amount", min_value=0.0, step=10.0, value=0.0)
-
+base_income = st.number_input("Enter your paycheck amount ($)", min_value=0.0, step=10.0, value=0.0)
 if freq == "Weekly":
-    monthly_income = income * 52 / 12
+    monthly_income = base_income * 52 / 12
 elif freq == "Biweekly":
-    monthly_income = income * 26 / 12
+    monthly_income = base_income * 26 / 12
 else:
-    monthly_income = income
+    monthly_income = base_income
+
+# Other income sources
+if st.checkbox("➕ Add other income sources?"):
+    n_other = st.number_input("How many other income sources?", min_value=1, max_value=10, step=1, key="n_other")
+    for i in range(int(n_other)):
+        label = st.text_input(f"Label for income #{i+1}", key=f"other_label_{i}")
+        amt = st.number_input(f"Amount for {label} ($)", min_value=0.0, step=5.0, value=0.0, key=f"other_amt_{i}")
+        monthly_income += amt
 
 st.success(f"Estimated Monthly Income: ${monthly_income:.2f}")
 
 # --- Monthly Expenses ---
 st.header("💿 Monthly Expenses")
 expenses = {}
+def add_expense(cat):
+    expenses[cat] = st.number_input(f"{cat} ($)", min_value=0.0, step=5.0, value=0.0, key=cat)
 
-def add_expense(category):
-    expenses[category] = st.number_input(f"{category} ($)", min_value=0.0, step=5.0, value=0.0, key=category)
-
-# Basic essentials
+# Core essentials
 add_expense("Rent/Mortgage")
 add_expense("Groceries")
 add_expense("Phone")
 add_expense("Internet")
 
-# Utilities toggle
+# Utilities with optional range
+use_range = st.checkbox("🔄 Use min/max range for Utilities?")
 if st.checkbox("Do you pay for Utilities?"):
-    for item in ["Electricity", "Gas", "Water", "Sewer", "Trash Pickup", "Heating Oil"]:
-        add_expense(item)
+    for u in ["Electricity","Gas","Water","Sewer","Trash Pickup","Heating Oil"]:
+        if use_range:
+            lo = st.number_input(f"{u} Min ($)", min_value=0.0, step=5.0, key=f"{u}_min")
+            hi = st.number_input(f"{u} Max ($)", min_value=0.0, step=5.0, key=f"{u}_max")
+            expenses[u] = (lo + hi) / 2
+        else:
+            add_expense(u)
 
-# Transportation toggle
-if st.checkbox("Do you have Transportation costs?"):
-    for item in ["Car Payment", "Fuel/Gas", "Public Transit", "Rideshare", "Parking"]:
-        add_expense(item)
+# Transportation
+if st.checkbox("🚗 Transportation costs?"):
+    for t in ["Car Payment","Fuel/Gas","Public Transit","Rideshare","Parking"]:
+        add_expense(t)
 
-# Insurance toggle
-if st.checkbox("Do you pay for Insurance?"):
-    for item in ["Health Insurance", "Auto Insurance", "Home/Renters Insurance", "Life Insurance"]:
-        add_expense(item)
+# Insurance
+if st.checkbox("🛡️ Insurance?"):
+    for ins in ["Health Insurance","Auto Insurance","Home/Renters Insurance","Life Insurance"]:
+        add_expense(ins)
 
-# Streaming toggle
-if st.checkbox("Do you subscribe to any Streaming Services?"):
-    for item in ["Netflix", "Hulu", "Disney+", "Amazon Prime Video", "HBO Max"]:
-        add_expense(item)
+# Streaming
+if st.checkbox("🎬 Streaming subscriptions?"):
+    for s in ["Netflix","Hulu","Disney+","Amazon Prime Video","HBO Max"]:
+        add_expense(s)
 
-# Calculate total expenses
+# Other expenses
+if st.checkbox("➕ Add other expenses?"):
+    n_exp = st.number_input("How many extra expense categories?", min_value=1, max_value=10, step=1, key="n_exp")
+    for i in range(int(n_exp)):
+        label = st.text_input(f"Label for expense #{i+1}", key=f"exp_label_{i}")
+        amt   = st.number_input(f"Amount for {label} ($)", min_value=0.0, step=5.0, value=0.0, key=f"exp_amt_{i}")
+        expenses[label] = amt
+
 total_expenses = sum(expenses.values())
 st.success(f"Total Monthly Expenses: ${total_expenses:.2f}")
 
 # --- Debts ---
 st.header("💳 Debts")
-num_debts = st.number_input("How many separate debts would you like to enter?", min_value=1, max_value=50, step=1)
-st.caption("We’ll guide you through each one step by step after you enter the total.")
+num_debts = st.number_input("How many debts?", min_value=1, max_value=50, step=1, key="num_debts")
+st.caption("Enter each debt’s name, payment, and balance:")
 
 debts = []
 for i in range(int(num_debts)):
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        name = st.text_input(f"Name of Debt #{i+1} (e.g., Capital One)", key=f"name_{i}")
-    with col2:
-        monthly_payment = st.number_input(f"Monthly Payment Amount for Debt #{i+1} ($)", key=f"payment_{i}", value=0.0)
-    with col3:
-        total_owed = st.number_input(f"Current Balance Owed on Debt #{i+1} ($)", key=f"owed_{i}", value=0.0)
-    debts.append({"Item": name, "Monthly Payment": monthly_payment, "Total Owed": total_owed})
+    c1,c2,c3 = st.columns(3)
+    with c1:
+        name = st.text_input(f"Name of Debt #{i+1}", key=f"name_{i}")
+    with c2:
+        pay  = st.number_input(f"Monthly Payment for {name} ($)", min_value=0.0, step=5.0, value=0.0, key=f"pay_{i}")
+    with c3:
+        owed = st.number_input(f"Total Owed on {name} ($)", min_value=0.0, step=5.0, value=0.0, key=f"owed_{i}")
+    months = math.ceil(owed/pay) if pay>0 else 0
+    debts.append({"Item": name, "Monthly Payment": pay, "Total Owed": owed, "Payoff Months": months})
 
 debt_df = pd.DataFrame(debts)
-monthly_debt_total = debt_df["Monthly Payment"].sum() if not debt_df.empty else 0.0
+monthly_debt_total = debt_df["Monthly Payment"].sum()
 
-# --- Summary Section ---
+# --- Summary ---
 st.header("📊 Summary")
 total_outflow = total_expenses + monthly_debt_total
-discretionary_income = monthly_income - total_outflow
-dti = (total_outflow / monthly_income) * 100 if monthly_income > 0 else 0
+discretionary  = monthly_income - total_outflow
+dti = (total_outflow/monthly_income*100) if monthly_income else 0
 
 st.markdown(f"""
 - ✅ **Monthly Income:** ${monthly_income:,.2f}  
-- ✅ **Total Monthly Outflow (Expenses + Debts):** ${total_outflow:,.2f}  
+- ✅ **Total Monthly Outflow:** ${total_outflow:,.2f}  
 - ✅ **Debt-to-Income Ratio:** {dti:.2f}%  
-- ✅ **Discretionary Income:** ${discretionary_income:,.2f}
+- ✅ **Discretionary Income:** ${discretionary:.2f}
 """)
 
-# --- Avalanche or Snowball Recommendation ---
-st.subheader("📌 Payoff Strategy Recommendation")
-if not debt_df.empty and len(debt_df) > 1:
-    max_total = debt_df["Total Owed"].max()
-    if max_total > 2 * debt_df["Total Owed"].mean():
-        strategy = "Snowball"
-        reason = "You have one or more large debts. Snowball helps build momentum by clearing small balances first."
+# --- Strategy & Timeline ---
+st.subheader("📌 Payoff Strategy & Timeline")
+if len(debts)>1:
+    max_bal = debt_df["Total Owed"].max()
+    if max_bal > 2*debt_df["Total Owed"].mean():
+        strat="Snowball"
+        note ="Clears small balances first for quick wins."
     else:
-        strategy = "Avalanche"
-        reason = "Your debts are relatively balanced. Avalanche saves more on interest by targeting high APRs first."
-
-    st.info(f"**Recommended Strategy:** {strategy}")
-    st.write(reason)
-
-    with st.expander("ℹ️ Strategy Breakdown"):
-        st.markdown("""
-        - **Avalanche Method**: Pay off the debt with the **highest interest rate first**, saving the most money in the long run.  
-        - **Snowball Method**: Pay off the **smallest balance first**, creating quick wins and motivation to stay on track.
-        """)
+        strat="Avalanche"
+        note ="Targets high-interest debts to save money."
+    st.info(f"**Strategy:** {strat} — {note}")
+    st.table(debt_df[["Item","Payoff Months"]])
 else:
-    st.warning("Enter at least 2 debts to get a payoff strategy recommendation.")
+    st.warning("Enter at least 2 debts for a strategy recommendation.")
 
-# --- Expense Table ---
+# --- Expense Breakdown Table ---
 st.subheader("📈 Expense Breakdown Table")
-if expenses:
-    expense_df = pd.DataFrame({
-        "Category": expenses.keys(),
-        "Amount ($)": expenses.values()
-    }).sort_values(by="Amount ($)", ascending=False)
-
-    expense_df["% of Total"] = (expense_df["Amount ($)"] / total_expenses * 100).round(2).astype(str) + '%'
-    st.dataframe(expense_df.reset_index(drop=True))
+expense_df = pd.DataFrame({
+    "Category": list(expenses.keys()),
+    "Amount ($)": list(expenses.values())
+})
+if total_expenses>0:
+    expense_df["% of Expense"] = (expense_df["Amount ($)"]/total_expenses*100).round(1).astype(str)+"%"
+    expense_df["% of Income"]  = (expense_df["Amount ($)"]/monthly_income*100).round(1).astype(str)+"%"
+    st.dataframe(expense_df.sort_values("Amount ($)", ascending=False).reset_index(drop=True))
 else:
-    st.warning("No expenses entered to display.")
+    st.warning("No expenses to display.")
+
+# --- Export ---
+export_excel(expense_df, debt_df)
 
 # --- Footer ---
 st.markdown("---")
