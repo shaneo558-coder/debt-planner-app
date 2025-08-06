@@ -2,11 +2,12 @@ import streamlit as st
 import pandas as pd
 import math
 import io
-import os
+import csv
 
-# --- Helper function for Excel export ---
+# --- Helper: Excel export ---
 def export_excel(expenses_df, debts_df):
     buffer = io.BytesIO()
+    # use openpyxl so we don’t need xlsxwriter on Streamlit Cloud
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         expenses_df.to_excel(writer, sheet_name='Expenses', index=False)
         debts_df.to_excel(writer, sheet_name='Debts', index=False)
@@ -21,24 +22,6 @@ def export_excel(expenses_df, debts_df):
 # --- Page config ---
 st.set_page_config(page_title="Debt Payoff Planner", layout="wide")
 
-# --- Sign-up Form (Sidebar) ---
-with st.sidebar.form("signup_form", clear_on_submit=True):
-    st.header("🔔 Stay in the Loop")
-    name  = st.text_input("Your Name")
-    email = st.text_input("Your Email")
-    submitted = st.form_submit_button("Sign Up")
-    if submitted:
-        if not name or not email:
-            st.error("Please enter both name and email.")
-        else:
-            csv_path = "signups.csv"
-            write_header = not os.path.exists(csv_path)
-            with open(csv_path, "a") as f:
-                if write_header:
-                    f.write("Name,Email\n")
-                f.write(f"{name},{email}\n")
-            st.success("Thanks for signing up! 🎉")
-
 # --- Monthly Income ---
 st.header("💵 Monthly Income")
 freq = st.selectbox("How are you paid?", ["Monthly", "Biweekly", "Weekly"])
@@ -50,12 +33,12 @@ elif freq == "Biweekly":
 else:
     monthly_income = base_income
 
-# Other income sources
+# Optional: other income sources
 if st.checkbox("➕ Add other income sources?"):
     n_other = st.number_input("How many other income sources?", min_value=1, max_value=10, step=1, key="n_other")
     for i in range(int(n_other)):
         label = st.text_input(f"Label for income #{i+1}", key=f"other_label_{i}")
-        amt   = st.number_input(f"Amount for {label} ($)", min_value=0.0, step=5.0, value=0.0, key=f"other_amt_{i}")
+        amt = st.number_input(f"Amount for {label} ($)", min_value=0.0, step=5.0, value=0.0, key=f"other_amt_{i}")
         monthly_income += amt
 
 st.success(f"Estimated Monthly Income: ${monthly_income:.2f}")
@@ -98,7 +81,7 @@ if st.checkbox("🎬 Streaming subscriptions?"):
     for s in ["Netflix","Hulu","Disney+","Amazon Prime Video","HBO Max"]:
         add_expense(s)
 
-# Other expenses
+# Other one-off expenses
 if st.checkbox("➕ Add other expenses?"):
     n_exp = st.number_input("How many extra expense categories?", min_value=1, max_value=10, step=1, key="n_exp")
     for i in range(int(n_exp)):
@@ -116,33 +99,48 @@ st.caption("Enter each debt’s name, payment, and balance:")
 
 debts = []
 for i in range(int(num_debts)):
-    c1,c2,c3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
     with c1:
         name = st.text_input(f"Name of Debt #{i+1}", key=f"name_{i}")
     with c2:
         pay  = st.number_input(f"Monthly Payment for {name} ($)", min_value=0.0, step=5.0, value=0.0, key=f"pay_{i}")
     with c3:
         owed = st.number_input(f"Total Owed on {name} ($)", min_value=0.0, step=5.0, value=0.0, key=f"owed_{i}")
-    months = math.ceil(owed / pay) if pay>0 else 0
-    debts.append({"Item": name, "Monthly Payment": pay, "Total Owed": owed, "Payoff Months": months})
+    months = math.ceil(owed/pay) if pay > 0 else 0
+    debts.append({
+        "Item": name,
+        "Monthly Payment": pay,
+        "Total Owed": owed,
+        "Payoff Months": months
+    })
 
 debt_df = pd.DataFrame(debts)
 monthly_debt_total = debt_df["Monthly Payment"].sum()
 
 # --- Summary ---
 st.header("📊 Summary")
-total_outflow   = total_expenses + monthly_debt_total
-discretionary   = monthly_income - total_outflow
-dti             = (total_outflow / monthly_income * 100) if monthly_income else 0
+total_outflow    = total_expenses + monthly_debt_total
+discretionary    = monthly_income - total_outflow
+dti              = (total_outflow / monthly_income * 100) if monthly_income else 0
 
 st.markdown(f"""
 - ✅ **Monthly Income:** ${monthly_income:,.2f}  
 - ✅ **Total Monthly Outflow:** ${total_outflow:,.2f}  
 - ✅ **Debt-to-Income Ratio:** {dti:.2f}%  
-- ✅ **Discretionary Income:** ${discretionary:.2f}
+- ✅ **Discretionary Income:** ${discretionary:,.2f}
 """)
 
-# --- Strategy & Timeline ---
+# --- Sign-up form (Stay in the Loop) ---
+st.sidebar.header("📬 Stay in the Loop")
+name  = st.sidebar.text_input("Your name")
+email = st.sidebar.text_input("Your email")
+if st.sidebar.button("Sign up"):
+    with open("signups.csv", "a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([name, email])
+    st.sidebar.success("Thanks! You’re on the list.")
+
+# --- Payoff Strategy & Timeline ---
 st.subheader("📌 Payoff Strategy & Timeline")
 if len(debts) > 1:
     max_bal = debt_df["Total Owed"].max()
@@ -153,7 +151,7 @@ if len(debts) > 1:
         strat = "Avalanche"
         note  = "Targets high-interest debts to save money."
     st.info(f"**Strategy:** {strat} — {note}")
-    st.table(debt_df[["Item","Payoff Months"]])
+    st.table(debt_df[["Item", "Payoff Months"]])
 else:
     st.warning("Enter at least 2 debts for a strategy recommendation.")
 
@@ -170,10 +168,9 @@ if total_expenses > 0:
 else:
     st.warning("No expenses to display.")
 
-# --- Export ---
+# --- Excel Export ---
 export_excel(expense_df, debt_df)
 
 # --- Footer ---
 st.markdown("---")
 st.caption("Built by Shane")
-
