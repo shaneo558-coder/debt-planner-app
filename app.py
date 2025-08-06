@@ -3,6 +3,7 @@ import pandas as pd
 import math
 import io
 import os
+import requests
 
 # --- Helper function for Excel export ---
 def export_excel(expenses_df, debts_df):
@@ -31,13 +32,14 @@ with st.sidebar.form("signup_form", clear_on_submit=True):
         if not name or not email:
             st.error("Please enter both name and email.")
         else:
-            csv_path = "signups.csv"
-            write_header = not os.path.exists(csv_path)
-            with open(csv_path, "a") as f:
-                if write_header:
-                    f.write("Name,Email\n")
-                f.write(f"{name},{email}\n")
-            st.success("Thanks for signing up! 🎉")
+            # POST to your Google Apps Script webhook
+            url     = st.secrets["signup_webhook_url"]
+            payload = {"name": name, "email": email}
+            resp    = requests.post(url, json=payload)
+            if resp.ok and resp.json().get("status") == "success":
+                st.success("Thanks for signing up! 🎉")
+            else:
+                st.error("Signup failed — please try again.")
 
 # --- Monthly Income ---
 st.header("💵 Monthly Income")
@@ -63,7 +65,6 @@ st.success(f"Estimated Monthly Income: ${monthly_income:.2f}")
 # --- Monthly Expenses ---
 st.header("💿 Monthly Expenses")
 expenses = {}
-
 def add_expense(cat):
     expenses[cat] = st.number_input(f"{cat} ($)", min_value=0.0, step=5.0, value=0.0, key=cat)
 
@@ -73,10 +74,10 @@ add_expense("Groceries")
 add_expense("Phone")
 add_expense("Internet")
 
-# Utilities toggle with nested min/max option
+# Utilities with optional range
+use_range = st.checkbox("🔄 Use min/max range for Utilities?")
 if st.checkbox("Do you pay for Utilities?"):
-    use_range = st.checkbox("    🔄 Use min/max range for Utilities?", key="util_range")  # indented label
-    for u in ["Electricity", "Gas", "Water", "Sewer", "Trash Pickup", "Heating Oil"]:
+    for u in ["Electricity","Gas","Water","Sewer","Trash Pickup","Heating Oil"]:
         if use_range:
             lo = st.number_input(f"{u} Min ($)", min_value=0.0, step=5.0, key=f"{u}_min")
             hi = st.number_input(f"{u} Max ($)", min_value=0.0, step=5.0, key=f"{u}_max")
@@ -86,17 +87,17 @@ if st.checkbox("Do you pay for Utilities?"):
 
 # Transportation
 if st.checkbox("🚗 Transportation costs?"):
-    for t in ["Car Payment", "Fuel/Gas", "Public Transit", "Rideshare", "Parking"]:
+    for t in ["Car Payment","Fuel/Gas","Public Transit","Rideshare","Parking"]:
         add_expense(t)
 
 # Insurance
 if st.checkbox("🛡️ Insurance?"):
-    for ins in ["Health Insurance", "Auto Insurance", "Home/Renters Insurance", "Life Insurance"]:
+    for ins in ["Health Insurance","Auto Insurance","Home/Renters Insurance","Life Insurance"]:
         add_expense(ins)
 
 # Streaming
 if st.checkbox("🎬 Streaming subscriptions?"):
-    for s in ["Netflix", "Hulu", "Disney+", "Amazon Prime Video", "HBO Max"]:
+    for s in ["Netflix","Hulu","Disney+","Amazon Prime Video","HBO Max"]:
         add_expense(s)
 
 # Other expenses
@@ -133,8 +134,8 @@ monthly_debt_total = debt_df["Monthly Payment"].sum()
 # --- Summary ---
 st.header("📊 Summary")
 total_outflow = total_expenses + monthly_debt_total
-discretionary  = monthly_income - total_outflow
-dti            = (total_outflow / monthly_income * 100) if monthly_income else 0
+discretionary = monthly_income - total_outflow
+dti           = (total_outflow / monthly_income * 100) if monthly_income else 0
 
 st.markdown(f"""
 - ✅ **Monthly Income:** ${monthly_income:,.2f}  
@@ -148,13 +149,11 @@ st.subheader("📌 Payoff Strategy & Timeline")
 if len(debts) > 1:
     max_bal = debt_df["Total Owed"].max()
     if max_bal > 2 * debt_df["Total Owed"].mean():
-        strat = "Snowball"
-        note  = "Clears small balances first for quick wins."
+        strat, note = "Snowball", "Clears small balances first for quick wins."
     else:
-        strat = "Avalanche"
-        note  = "Targets high-interest debts to save money."
+        strat, note = "Avalanche", "Targets high-interest debts to save money."
     st.info(f"**Strategy:** {strat} — {note}")
-    st.table(debt_df[["Item", "Payoff Months"]])
+    st.table(debt_df[["Item","Payoff Months"]])
 else:
     st.warning("Enter at least 2 debts for a strategy recommendation.")
 
