@@ -39,14 +39,6 @@ with st.sidebar.form("signup_form", clear_on_submit=True):
                 f.write(f"{name},{email}\n")
             st.success("Thanks for signing up! 🎉")
 
-# --- Helper function to reset all inputs ---
-def reset_form():
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.experimental_rerun()
-
-st.sidebar.button("🔄 Reset Form", on_click=reset_form)
-
 # --- Monthly Income ---
 st.header("💵 Monthly Income")
 freq = st.selectbox("How are you paid?", ["Monthly", "Biweekly", "Weekly"])
@@ -184,3 +176,4 @@ export_excel(expense_df, debt_df)
 # --- Footer ---
 st.markdown("---")
 st.caption("Built by Shane")
+
