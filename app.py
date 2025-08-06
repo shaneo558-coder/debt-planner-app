@@ -74,16 +74,22 @@ add_expense("Groceries")
 add_expense("Phone")
 add_expense("Internet")
 
-# Utilities with optional range
-use_range = st.checkbox("🔄 Use min/max range for Utilities?")
+# --- Monthly Expenses (after adding “Phone” and “Internet”) ---
+
+# Utilities toggle
 if st.checkbox("Do you pay for Utilities?"):
-    for u in ["Electricity","Gas","Water","Sewer","Trash Pickup","Heating Oil"]:
+    # nested min/max toggle, indented to sit under Utilities
+    use_range = st.checkbox("    🔄 Use min/max range for Utilities?", key="use_range")
+    for u in ["Electricity", "Gas", "Water", "Sewer", "Trash Pickup", "Heating Oil"]:
         if use_range:
             lo = st.number_input(f"{u} Min ($)", min_value=0.0, step=5.0, key=f"{u}_min")
             hi = st.number_input(f"{u} Max ($)", min_value=0.0, step=5.0, key=f"{u}_max")
             expenses[u] = (lo + hi) / 2
         else:
             add_expense(u)
+
+# …then your Transportation toggle follows…
+
 
 # Transportation
 if st.checkbox("🚗 Transportation costs?"):
@@ -176,3 +182,4 @@ export_excel(expense_df, debt_df)
 # --- Footer ---
 st.markdown("---")
 st.caption("Built by Shane")
+
