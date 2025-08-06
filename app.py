@@ -6,7 +6,6 @@ import io
 # --- Helper function for Excel export ---
 def export_excel(expenses_df, debts_df):
     buffer = io.BytesIO()
-    # Use openpyxl (installed via requirements)
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         expenses_df.to_excel(writer, sheet_name='Expenses', index=False)
         debts_df.to_excel(writer, sheet_name='Debts', index=False)
