@@ -3,17 +3,6 @@ import pandas as pd
 import math
 import io
 import os
-import gspread
-from google.oauth2.service_account import Credentials
-
-# --- Google Sheets Setup ---
-# Authorize gspread using service account credentials stored in Streamlit Secrets
-creds = Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"],
-    scopes=["https://www.googleapis.com/auth/spreadsheets"]
-)
-gc = gspread.authorize(creds)
-sheet = gc.open_by_key(st.secrets["sheet_id"]).sheet1
 
 # --- Helper function for Excel export ---
 def export_excel(expenses_df, debts_df):
@@ -42,8 +31,12 @@ with st.sidebar.form("signup_form", clear_on_submit=True):
         if not name or not email:
             st.error("Please enter both name and email.")
         else:
-            # Append to Google Sheet
-            sheet.append_row([name, email])
+            csv_path = "signups.csv"
+            write_header = not os.path.exists(csv_path)
+            with open(csv_path, "a") as f:
+                if write_header:
+                    f.write("Name,Email\n")
+                f.write(f"{name},{email}\n")
             st.success("Thanks for signing up! 🎉")
 
 # --- Monthly Income ---
@@ -58,7 +51,7 @@ else:
     monthly_income = base_income
 
 # Other income sources
-if st.checkbox("➕ Add other income sources?", key="n_other_toggle"):
+if st.checkbox("➕ Add other income sources?"):
     n_other = st.number_input("How many other income sources?", min_value=1, max_value=10, step=1, key="n_other")
     for i in range(int(n_other)):
         label = st.text_input(f"Label for income #{i+1}", key=f"other_label_{i}")
@@ -80,8 +73,8 @@ add_expense("Phone")
 add_expense("Internet")
 
 # Utilities with optional range
-use_range = st.checkbox("🔄 Use min/max range for Utilities?", key="util_range_toggle")
-if st.checkbox("Do you pay for Utilities?", key="util_toggle"):
+use_range = st.checkbox("🔄 Use min/max range for Utilities?")
+if st.checkbox("Do you pay for Utilities?"):
     for u in ["Electricity","Gas","Water","Sewer","Trash Pickup","Heating Oil"]:
         if use_range:
             lo = st.number_input(f"{u} Min ($)", min_value=0.0, step=5.0, key=f"{u}_min")
@@ -91,22 +84,22 @@ if st.checkbox("Do you pay for Utilities?", key="util_toggle"):
             add_expense(u)
 
 # Transportation
-if st.checkbox("🚗 Transportation costs?", key="trans_toggle"):
+if st.checkbox("🚗 Transportation costs?"):
     for t in ["Car Payment","Fuel/Gas","Public Transit","Rideshare","Parking"]:
         add_expense(t)
 
 # Insurance
-if st.checkbox("🛡️ Insurance?", key="ins_toggle"):
+if st.checkbox("🛡️ Insurance?"):
     for ins in ["Health Insurance","Auto Insurance","Home/Renters Insurance","Life Insurance"]:
         add_expense(ins)
 
 # Streaming
-if st.checkbox("🎬 Streaming subscriptions?", key="stream_toggle"):
+if st.checkbox("🎬 Streaming subscriptions?"):
     for s in ["Netflix","Hulu","Disney+","Amazon Prime Video","HBO Max"]:
         add_expense(s)
 
 # Other expenses
-if st.checkbox("➕ Add other expenses?", key="other_exp_toggle"):
+if st.checkbox("➕ Add other expenses?"):
     n_exp = st.number_input("How many extra expense categories?", min_value=1, max_value=10, step=1, key="n_exp")
     for i in range(int(n_exp)):
         label = st.text_input(f"Label for expense #{i+1}", key=f"exp_label_{i}")
@@ -147,17 +140,18 @@ st.markdown(f"""
 - ✅ **Total Monthly Outflow:** ${total_outflow:,.2f}  
 - ✅ **Debt-to-Income Ratio:** {dti:.2f}%  
 - ✅ **Discretionary Income:** ${discretionary:.2f}
-"""
-)
+""")
 
 # --- Strategy & Timeline ---
 st.subheader("📌 Payoff Strategy & Timeline")
 if len(debts) > 1:
     max_bal = debt_df["Total Owed"].max()
     if max_bal > 2 * debt_df["Total Owed"].mean():
-        strat, note = "Snowball", "Clears small balances first for quick wins."
+        strat = "Snowball"
+        note  = "Clears small balances first for quick wins."
     else:
-        strat, note = "Avalanche", "Targets high-interest debts to save money."
+        strat = "Avalanche"
+        note  = "Targets high-interest debts to save money."
     st.info(f"**Strategy:** {strat} — {note}")
     st.table(debt_df[["Item","Payoff Months"]])
 else:
