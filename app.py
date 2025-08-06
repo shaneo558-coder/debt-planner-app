@@ -3,15 +3,10 @@ import pandas as pd
 import math
 import io
 
-# --- Helper functions ---
-def reset_form():
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.experimental_rerun()
-
+# --- Helper function for Excel export ---
 def export_excel(expenses_df, debts_df):
     buffer = io.BytesIO()
-    # Switched to openpyxl (built-in) to avoid missing xlsxwriter on Streamlit Cloud
+    # Use openpyxl (installed via requirements)
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         expenses_df.to_excel(writer, sheet_name='Expenses', index=False)
         debts_df.to_excel(writer, sheet_name='Debts', index=False)
@@ -23,9 +18,8 @@ def export_excel(expenses_df, debts_df):
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-# --- Page config & reset ---
+# --- Page config ---
 st.set_page_config(page_title="Debt Payoff Planner", layout="wide")
-st.sidebar.button("🔄 Reset Form", on_click=reset_form)
 
 # --- Monthly Income ---
 st.header("💵 Monthly Income")
@@ -38,7 +32,7 @@ elif freq == "Biweekly":
 else:
     monthly_income = base_income
 
-# Other income sources
+# Optional other income sources
 if st.checkbox("➕ Add other income sources?"):
     n_other = st.number_input("How many other income sources?", min_value=1, max_value=10, step=1, key="n_other")
     for i in range(int(n_other)):
@@ -94,6 +88,7 @@ if st.checkbox("➕ Add other expenses?"):
         amt   = st.number_input(f"Amount for {label} ($)", min_value=0.0, step=5.0, value=0.0, key=f"exp_amt_{i}")
         expenses[label] = amt
 
+# Total expenses
 total_expenses = sum(expenses.values())
 st.success(f"Total Monthly Expenses: ${total_expenses:.2f}")
 
@@ -120,6 +115,7 @@ monthly_debt_total = debt_df["Monthly Payment"].sum()
 # --- Summary ---
 st.header("📊 Summary")
 total_outflow = total_expenses + monthly_debt_total
+
 discretionary  = monthly_income - total_outflow
 dti = (total_outflow/monthly_income*100) if monthly_income else 0
 
@@ -128,7 +124,8 @@ st.markdown(f"""
 - ✅ **Total Monthly Outflow:** ${total_outflow:,.2f}  
 - ✅ **Debt-to-Income Ratio:** {dti:.2f}%  
 - ✅ **Discretionary Income:** ${discretionary:,.2f}
-""")
+"""
+)
 
 # --- Strategy & Timeline ---
 st.subheader("📌 Payoff Strategy & Timeline")
@@ -152,9 +149,9 @@ expense_df = pd.DataFrame({
     "Amount ($)": list(expenses.values())
 })
 if total_expenses>0:
-    expense_df["% of Expense"] = (expense_df["Amount ($)"]/total_expenses*100).round(1).astype(str)+"%"
-    expense_df["% of Income"]  = (expense_df["Amount ($)"]/monthly_income*100).round(1).astype(str)+"%"
-    st.dataframe(expense_df.sort_values("Amount ($)", ascending=False).reset_index(drop=True))
+    expense_df["% of Expense"] = (expense_df["Amount ($) "]/total_expenses*100).round(1).astype(str)+"%"
+    expense_df["% of Income"]  = (expense_df["Amount ($) "]/monthly_income*100).round(1).astype(str)+"%"
+    st.dataframe(expense_df.sort_values("Amount ($) ", ascending=False).reset_index(drop=True))
 else:
     st.warning("No expenses to display.")
 
