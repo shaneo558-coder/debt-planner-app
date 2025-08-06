@@ -3,6 +3,7 @@ import pandas as pd
 import math
 import io
 import os
+import requests
 
 # --- Helper function for Excel export ---
 def export_excel(expenses_df, debts_df):
@@ -31,13 +32,14 @@ with st.sidebar.form("signup_form", clear_on_submit=True):
         if not name or not email:
             st.error("Please enter both name and email.")
         else:
-            csv_path = "signups.csv"
-            write_header = not os.path.exists(csv_path)
-            with open(csv_path, "a") as f:
-                if write_header:
-                    f.write("Name,Email\n")
-                f.write(f"{name},{email}\n")
-            st.success("Thanks for signing up! 🎉")
+            # POST to your Google Apps Script webhook
+            url     = st.secrets["signup_webhook_url"]
+            payload = {"name": name, "email": email}
+            resp    = requests.post(url, json=payload)
+            if resp.ok and resp.json().get("status") == "success":
+                st.success("Thanks for signing up! 🎉")
+            else:
+                st.error("Signup failed — please try again.")
 
 # --- Monthly Income ---
 st.header("💵 Monthly Income")
@@ -116,14 +118,14 @@ st.caption("Enter each debt’s name, payment, and balance:")
 
 debts = []
 for i in range(int(num_debts)):
-    c1,c2,c3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
     with c1:
         name = st.text_input(f"Name of Debt #{i+1}", key=f"name_{i}")
     with c2:
         pay  = st.number_input(f"Monthly Payment for {name} ($)", min_value=0.0, step=5.0, value=0.0, key=f"pay_{i}")
     with c3:
         owed = st.number_input(f"Total Owed on {name} ($)", min_value=0.0, step=5.0, value=0.0, key=f"owed_{i}")
-    months = math.ceil(owed / pay) if pay>0 else 0
+    months = math.ceil(owed / pay) if pay > 0 else 0
     debts.append({"Item": name, "Monthly Payment": pay, "Total Owed": owed, "Payoff Months": months})
 
 debt_df = pd.DataFrame(debts)
@@ -131,9 +133,9 @@ monthly_debt_total = debt_df["Monthly Payment"].sum()
 
 # --- Summary ---
 st.header("📊 Summary")
-total_outflow   = total_expenses + monthly_debt_total
-discretionary   = monthly_income - total_outflow
-dti             = (total_outflow / monthly_income * 100) if monthly_income else 0
+total_outflow = total_expenses + monthly_debt_total
+discretionary = monthly_income - total_outflow
+dti           = (total_outflow / monthly_income * 100) if monthly_income else 0
 
 st.markdown(f"""
 - ✅ **Monthly Income:** ${monthly_income:,.2f}  
@@ -147,11 +149,9 @@ st.subheader("📌 Payoff Strategy & Timeline")
 if len(debts) > 1:
     max_bal = debt_df["Total Owed"].max()
     if max_bal > 2 * debt_df["Total Owed"].mean():
-        strat = "Snowball"
-        note  = "Clears small balances first for quick wins."
+        strat, note = "Snowball", "Clears small balances first for quick wins."
     else:
-        strat = "Avalanche"
-        note  = "Targets high-interest debts to save money."
+        strat, note = "Avalanche", "Targets high-interest debts to save money."
     st.info(f"**Strategy:** {strat} — {note}")
     st.table(debt_df[["Item","Payoff Months"]])
 else:
@@ -176,6 +176,3 @@ export_excel(expense_df, debt_df)
 # --- Footer ---
 st.markdown("---")
 st.caption("Built by Shane")
-
-
-
