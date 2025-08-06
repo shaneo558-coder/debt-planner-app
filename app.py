@@ -2,11 +2,16 @@ import streamlit as st
 import pandas as pd
 import math
 import io
-import os
 
 # --- Helper functions ---
+def reset_form():
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.experimental_rerun()
+
 def export_excel(expenses_df, debts_df):
     buffer = io.BytesIO()
+    # Switched to openpyxl (built-in) to avoid missing xlsxwriter on Streamlit Cloud
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         expenses_df.to_excel(writer, sheet_name='Expenses', index=False)
         debts_df.to_excel(writer, sheet_name='Debts', index=False)
@@ -18,33 +23,8 @@ def export_excel(expenses_df, debts_df):
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-# --- Page config ---
+# --- Page config & reset ---
 st.set_page_config(page_title="Debt Payoff Planner", layout="wide")
-
-# --- Sign-up Form (Sidebar) ---
-with st.sidebar.form("signup_form", clear_on_submit=True):
-    st.header("🔔 Stay in the Loop")
-    name = st.text_input("Your Name")
-    email = st.text_input("Your Email")
-    submitted = st.form_submit_button("Sign Up")
-    if submitted:
-        if not name or not email:
-            st.error("Please enter both name and email.")
-        else:
-            csv_path = "signups.csv"
-            write_header = not os.path.exists(csv_path)
-            with open(csv_path, "a") as f:
-                if write_header:
-                    f.write("Name,Email\n")
-                f.write(f"{name},{email}\n")
-            st.success("Thanks for signing up! 🎉")
-
-# --- Reset Form ---
-def reset_form():
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.experimental_rerun()
-
 st.sidebar.button("🔄 Reset Form", on_click=reset_form)
 
 # --- Monthly Income ---
@@ -114,7 +94,6 @@ if st.checkbox("➕ Add other expenses?"):
         amt   = st.number_input(f"Amount for {label} ($)", min_value=0.0, step=5.0, value=0.0, key=f"exp_amt_{i}")
         expenses[label] = amt
 
-# Total expenses
 total_expenses = sum(expenses.values())
 st.success(f"Total Monthly Expenses: ${total_expenses:.2f}")
 
@@ -135,4 +114,53 @@ for i in range(int(num_debts)):
     months = math.ceil(owed/pay) if pay>0 else 0
     debts.append({"Item": name, "Monthly Payment": pay, "Total Owed": owed, "Payoff Months": months})
 
-```
+debt_df = pd.DataFrame(debts)
+monthly_debt_total = debt_df["Monthly Payment"].sum()
+
+# --- Summary ---
+st.header("📊 Summary")
+total_outflow = total_expenses + monthly_debt_total
+discretionary  = monthly_income - total_outflow
+dti = (total_outflow/monthly_income*100) if monthly_income else 0
+
+st.markdown(f"""
+- ✅ **Monthly Income:** ${monthly_income:,.2f}  
+- ✅ **Total Monthly Outflow:** ${total_outflow:,.2f}  
+- ✅ **Debt-to-Income Ratio:** {dti:.2f}%  
+- ✅ **Discretionary Income:** ${discretionary:,.2f}
+""")
+
+# --- Strategy & Timeline ---
+st.subheader("📌 Payoff Strategy & Timeline")
+if len(debts)>1:
+    max_bal = debt_df["Total Owed"].max()
+    if max_bal > 2*debt_df["Total Owed"].mean():
+        strat="Snowball"
+        note ="Clears small balances first for quick wins."
+    else:
+        strat="Avalanche"
+        note ="Targets high-interest debts to save money."
+    st.info(f"**Strategy:** {strat} — {note}")
+    st.table(debt_df[["Item","Payoff Months"]])
+else:
+    st.warning("Enter at least 2 debts for a strategy recommendation.")
+
+# --- Expense Breakdown Table ---
+st.subheader("📈 Expense Breakdown Table")
+expense_df = pd.DataFrame({
+    "Category": list(expenses.keys()),
+    "Amount ($)": list(expenses.values())
+})
+if total_expenses>0:
+    expense_df["% of Expense"] = (expense_df["Amount ($)"]/total_expenses*100).round(1).astype(str)+"%"
+    expense_df["% of Income"]  = (expense_df["Amount ($)"]/monthly_income*100).round(1).astype(str)+"%"
+    st.dataframe(expense_df.sort_values("Amount ($)", ascending=False).reset_index(drop=True))
+else:
+    st.warning("No expenses to display.")
+
+# --- Export ---
+export_excel(expense_df, debt_df)
+
+# --- Footer ---
+st.markdown("---")
+st.caption("Built by Shane")
