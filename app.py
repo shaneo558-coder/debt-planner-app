@@ -22,24 +22,23 @@ def export_excel(expenses_df, debts_df):
 # --- Page config ---
 st.set_page_config(page_title="Debt Payoff Planner", layout="wide")
 
-# --- Sign-up Form (Sidebar) ---
-with st.sidebar.form("signup_form", clear_on_submit=True):
-    st.header("🔔 Stay in the Loop")
-    name  = st.text_input("Your Name")
-    email = st.text_input("Your Email")
-    submitted = st.form_submit_button("Sign Up")
-    if submitted:
-        if not name or not email:
-            st.error("Please enter both name and email.")
-        else:
-            # POST to your Google Apps Script webhook
-            url     = st.secrets["signup_webhook_url"]
-            payload = {"name": name, "email": email}
-            resp    = requests.post(url, json=payload)
-            if resp.ok and resp.json().get("status") == "success":
-                st.success("Thanks for signing up! 🎉")
+# --- Stay in the Loop (always visible) ---
+with st.expander("🔔 Stay in the Loop", expanded=True):
+    with st.form("signup_form", clear_on_submit=True):
+        name      = st.text_input("Your Name")
+        email     = st.text_input("Your Email")
+        submitted = st.form_submit_button("Sign Up")
+        if submitted:
+            if not name or not email:
+                st.error("Please enter both name and email.")
             else:
-                st.error("Signup failed — please try again.")
+                url     = st.secrets["signup_webhook_url"]
+                payload = {"name": name, "email": email}
+                resp    = requests.post(url, json=payload)
+                if resp.ok and resp.json().get("status") == "success":
+                    st.success("Thanks for signing up! 🎉")
+                else:
+                    st.error("Signup failed — please try again.")
 
 # --- Monthly Income ---
 st.header("💵 Monthly Income")
@@ -182,4 +181,5 @@ export_excel(expense_df, debt_df)
 # --- Footer ---
 st.markdown("---")
 st.caption("Built by Shane")
+
 
