@@ -22,23 +22,23 @@ def export_excel(expenses_df, debts_df):
 # --- Page config ---
 st.set_page_config(page_title="Debt Payoff Planner", layout="wide")
 
-# --- Sign-up Form (Sidebar) ---
-with st.sidebar.form("signup_form", clear_on_submit=True):
-    st.header("🔔 Stay in the Loop")
-    name  = st.text_input("Your Name")
-    email = st.text_input("Your Email")
-    submitted = st.form_submit_button("Sign Up")
-    if submitted:
-        if not name or not email:
-            st.error("Please enter both name and email.")
-        else:
-            url     = st.secrets["signup_webhook_url"]
-            payload = {"name": name, "email": email}
-            resp    = requests.post(url, json=payload)
-            if resp.ok and resp.json().get("status") == "success":
-                st.success("Thanks for signing up! 🎉")
+# --- Stay in the Loop (always visible) ---
+with st.expander("🔔 Join the BudgetMap Beta", expanded=True):
+    with st.form("signup_form", clear_on_submit=True):
+        name      = st.text_input("Your Name")
+        email     = st.text_input("Your Email")
+        submitted = st.form_submit_button("Sign Up")
+        if submitted:
+            if not name or not email:
+                st.error("Please enter both name and email.")
             else:
-                st.error("Signup failed — please try again.")
+                url     = st.secrets["signup_webhook_url"]
+                payload = {"name": name, "email": email}
+                resp    = requests.post(url, json=payload)
+                if resp.ok and resp.json().get("status") == "success":
+                    st.success("Thanks for signing up! 🎉")
+                else:
+                    st.error("Signup failed — please try again.")
 
 # --- Monthly Income ---
 st.header("💵 Monthly Income")
@@ -73,8 +73,11 @@ add_expense("Groceries")
 add_expense("Phone")
 add_expense("Internet")
 
-# Utilities toggle with nested range option
+# --- Monthly Expenses (after adding “Phone” and “Internet”) ---
+
+# Utilities toggle
 if st.checkbox("Do you pay for Utilities?"):
+    # nested min/max toggle, indented to sit under Utilities
     use_range = st.checkbox("    🔄 Use min/max range for Utilities?", key="use_range")
     for u in ["Electricity", "Gas", "Water", "Sewer", "Trash Pickup", "Heating Oil"]:
         if use_range:
@@ -83,6 +86,9 @@ if st.checkbox("Do you pay for Utilities?"):
             expenses[u] = (lo + hi) / 2
         else:
             add_expense(u)
+
+# …then your Transportation toggle follows…
+
 
 # Transportation
 if st.checkbox("🚗 Transportation costs?"):
@@ -156,22 +162,18 @@ if len(debts) > 1:
 else:
     st.warning("Enter at least 2 debts for a strategy recommendation.")
 
-# --- Expense Breakdown Table (filtered) ---
+# --- Expense Breakdown Table ---
 st.subheader("📈 Expense Breakdown Table")
 expense_df = pd.DataFrame({
     "Category": list(expenses.keys()),
     "Amount ($)": list(expenses.values())
 })
-
-# —— NEW: drop any row with Amount ≤ $0.50 —— 
-expense_df = expense_df[expense_df["Amount ($)"] > 0.50]
-
-if not expense_df.empty:
+if total_expenses > 0:
     expense_df["% of Expense"] = (expense_df["Amount ($)"] / total_expenses * 100).round(1).astype(str) + "%"
     expense_df["% of Income"]  = (expense_df["Amount ($)"] / monthly_income * 100).round(1).astype(str) + "%"
     st.dataframe(expense_df.sort_values("Amount ($)", ascending=False).reset_index(drop=True))
 else:
-    st.warning("No expenses above $0.50 to display.")
+    st.warning("No expenses to display.")
 
 # --- Export ---
 export_excel(expense_df, debt_df)
