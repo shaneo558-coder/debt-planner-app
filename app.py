@@ -23,7 +23,7 @@ def export_excel(expenses_df, debts_df):
 st.set_page_config(page_title="Debt Payoff Planner", layout="wide")
 
 # --- Stay in the Loop (always visible) ---
-with st.expander("🔔 Stay in the Loop", expanded=True):
+with st.expander("🔔 Join the BudgetMap Beta", expanded=True):
     with st.form("signup_form", clear_on_submit=True):
         name      = st.text_input("Your Name")
         email     = st.text_input("Your Email")
@@ -181,5 +181,6 @@ export_excel(expense_df, debt_df)
 # --- Footer ---
 st.markdown("---")
 st.caption("Built by Shane")
+
 
 
