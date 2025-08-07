@@ -6,23 +6,11 @@ import os
 import requests
 
 # --- Helper function for Excel export ---
-def export_excel(expenses_df, debts_df, summary):
-    """
-    expenses_df: DataFrame of expenses
-    debts_df: DataFrame of debts
-    summary: dict with keys "Monthly Income", "Total Outflow", "DTI", "Discretionary Income"
-    """
+def export_excel(expenses_df, debts_df):
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         expenses_df.to_excel(writer, sheet_name='Expenses', index=False)
         debts_df.to_excel(writer, sheet_name='Debts', index=False)
-        summary_df = pd.DataFrame([
-            {"Metric": "Monthly Income",           "Value": f"${summary['Monthly Income']:.2f}"},
-            {"Metric": "Total Monthly Outflow",    "Value": f"${summary['Total Outflow']:.2f}"},
-            {"Metric": "Debt-to-Income Ratio",     "Value": f"{summary['DTI']:.2f}%"},
-            {"Metric": "Discretionary Income",     "Value": f"${summary['Discretionary Income']:.2f}"}
-        ])
-        summary_df.to_excel(writer, sheet_name='Summary', index=False)
     data = buffer.getvalue()
     st.download_button(
         label="📥 Download Excel Report",
@@ -34,23 +22,23 @@ def export_excel(expenses_df, debts_df, summary):
 # --- Page config ---
 st.set_page_config(page_title="Debt Payoff Planner", layout="wide")
 
-# --- Stay in the Loop (always visible) ---
-with st.expander("🔔 Stay in the Loop", expanded=True):
-    with st.form("signup_form", clear_on_submit=True):
-        name      = st.text_input("Your Name")
-        email     = st.text_input("Your Email")
-        submitted = st.form_submit_button("Sign Up")
-        if submitted:
-            if not name or not email:
-                st.error("Please enter both name and email.")
+# --- Sign-up Form (Sidebar) ---
+with st.sidebar.form("signup_form", clear_on_submit=True):
+    st.header("🔔 Stay in the Loop")
+    name  = st.text_input("Your Name")
+    email = st.text_input("Your Email")
+    submitted = st.form_submit_button("Sign Up")
+    if submitted:
+        if not name or not email:
+            st.error("Please enter both name and email.")
+        else:
+            url     = st.secrets["signup_webhook_url"]
+            payload = {"name": name, "email": email}
+            resp    = requests.post(url, json=payload)
+            if resp.ok and resp.json().get("status") == "success":
+                st.success("Thanks for signing up! 🎉")
             else:
-                url     = st.secrets["signup_webhook_url"]
-                payload = {"name": name, "email": email}
-                resp    = requests.post(url, json=payload)
-                if resp.ok and resp.json().get("status") == "success":
-                    st.success("Thanks for signing up! 🎉")
-                else:
-                    st.error("Signup failed — please try again.")
+                st.error("Signup failed — please try again.")
 
 # --- Monthly Income ---
 st.header("💵 Monthly Income")
@@ -63,6 +51,7 @@ elif freq == "Biweekly":
 else:
     monthly_income = base_income
 
+# Other income sources
 if st.checkbox("➕ Add other income sources?"):
     n_other = st.number_input("How many other income sources?", min_value=1, max_value=10, step=1, key="n_other")
     for i in range(int(n_other)):
@@ -78,11 +67,13 @@ expenses = {}
 def add_expense(cat):
     expenses[cat] = st.number_input(f"{cat} ($)", min_value=0.0, step=5.0, value=0.0, key=cat)
 
+# Core essentials
 add_expense("Rent/Mortgage")
 add_expense("Groceries")
 add_expense("Phone")
 add_expense("Internet")
 
+# Utilities toggle with nested range option
 if st.checkbox("Do you pay for Utilities?"):
     use_range = st.checkbox("    🔄 Use min/max range for Utilities?", key="use_range")
     for u in ["Electricity", "Gas", "Water", "Sewer", "Trash Pickup", "Heating Oil"]:
@@ -93,18 +84,22 @@ if st.checkbox("Do you pay for Utilities?"):
         else:
             add_expense(u)
 
+# Transportation
 if st.checkbox("🚗 Transportation costs?"):
-    for t in ["Car Payment", "Fuel/Gas", "Public Transit", "Rideshare", "Parking"]:
+    for t in ["Car Payment","Fuel/Gas","Public Transit","Rideshare","Parking"]:
         add_expense(t)
 
+# Insurance
 if st.checkbox("🛡️ Insurance?"):
-    for ins in ["Health Insurance", "Auto Insurance", "Home/Renters Insurance", "Life Insurance"]:
+    for ins in ["Health Insurance","Auto Insurance","Home/Renters Insurance","Life Insurance"]:
         add_expense(ins)
 
+# Streaming
 if st.checkbox("🎬 Streaming subscriptions?"):
-    for s in ["Netflix", "Hulu", "Disney+", "Amazon Prime Video", "HBO Max"]:
+    for s in ["Netflix","Hulu","Disney+","Amazon Prime Video","HBO Max"]:
         add_expense(s)
 
+# Other expenses
 if st.checkbox("➕ Add other expenses?"):
     n_exp = st.number_input("How many extra expense categories?", min_value=1, max_value=10, step=1, key="n_exp")
     for i in range(int(n_exp)):
@@ -138,8 +133,8 @@ monthly_debt_total = debt_df["Monthly Payment"].sum()
 # --- Summary ---
 st.header("📊 Summary")
 total_outflow = total_expenses + monthly_debt_total
-discretionary  = monthly_income - total_outflow
-dti            = (total_outflow / monthly_income * 100) if monthly_income else 0
+discretionary = monthly_income - total_outflow
+dti           = (total_outflow / monthly_income * 100) if monthly_income else 0
 
 st.markdown(f"""
 - ✅ **Monthly Income:** ${monthly_income:,.2f}  
@@ -157,31 +152,29 @@ if len(debts) > 1:
     else:
         strat, note = "Avalanche", "Targets high-interest debts to save money."
     st.info(f"**Strategy:** {strat} — {note}")
-    st.table(debt_df[["Item", "Payoff Months"]])
+    st.table(debt_df[["Item","Payoff Months"]])
 else:
     st.warning("Enter at least 2 debts for a strategy recommendation.")
 
-# --- Expense Breakdown Table ---
+# --- Expense Breakdown Table (filtered) ---
 st.subheader("📈 Expense Breakdown Table")
 expense_df = pd.DataFrame({
     "Category": list(expenses.keys()),
     "Amount ($)": list(expenses.values())
 })
-if total_expenses > 0:
+
+# —— NEW: drop any row with Amount ≤ $0.50 —— 
+expense_df = expense_df[expense_df["Amount ($)"] > 0.50]
+
+if not expense_df.empty:
     expense_df["% of Expense"] = (expense_df["Amount ($)"] / total_expenses * 100).round(1).astype(str) + "%"
     expense_df["% of Income"]  = (expense_df["Amount ($)"] / monthly_income * 100).round(1).astype(str) + "%"
     st.dataframe(expense_df.sort_values("Amount ($)", ascending=False).reset_index(drop=True))
 else:
-    st.warning("No expenses to display.")
+    st.warning("No expenses above $0.50 to display.")
 
 # --- Export ---
-summary = {
-    "Monthly Income":      monthly_income,
-    "Total Outflow":       total_outflow,
-    "DTI":                 dti,
-    "Discretionary Income": discretionary
-}
-export_excel(expense_df, debt_df, summary)
+export_excel(expense_df, debt_df)
 
 # --- Footer ---
 st.markdown("---")
