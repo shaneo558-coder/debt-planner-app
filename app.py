@@ -5,6 +5,23 @@ import io
 import os
 import requests
 
+# --- Helper function for Excel export ---
+def export_excel(expenses_df, debts_df, summary_dict):
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        # write summary on its own sheet
+        pd.DataFrame.from_dict(summary_dict, orient="index", columns=["Value"]) \
+            .to_excel(writer, sheet_name='Summary')
+        expenses_df.to_excel(writer, sheet_name='Expenses', index=False)
+        debts_df.to_excel(writer, sheet_name='Debts', index=False)
+    data = buffer.getvalue()
+    st.download_button(
+        label="📥 Download Excel Report",
+        data=data,
+        file_name="BudgetMap_Report.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
 # --- Page config ---
 st.set_page_config(page_title="Debt Payoff Planner", layout="wide")
 
@@ -28,7 +45,7 @@ with st.expander("🔔 Join the BudgetMap Beta", expanded=True):
 
 # --- Monthly Income ---
 st.header("💵 Monthly Income")
-freq        = st.selectbox("How are you paid?", ["Monthly", "Biweekly", "Weekly"])
+freq = st.selectbox("How are you paid?", ["Monthly", "Biweekly", "Weekly"])
 base_income = st.number_input("Enter your paycheck amount ($)", min_value=0.0, step=10.0, value=0.0)
 if freq == "Weekly":
     monthly_income = base_income * 52 / 12
@@ -59,7 +76,7 @@ add_expense("Groceries")
 add_expense("Phone")
 add_expense("Internet")
 
-# Utilities toggle (with nested min/max)
+# Utilities toggle
 if st.checkbox("Do you pay for Utilities?"):
     use_range = st.checkbox("    🔄 Use min/max range for Utilities?", key="use_range")
     for u in ["Electricity", "Gas", "Water", "Sewer", "Trash Pickup", "Heating Oil"]:
@@ -98,7 +115,7 @@ st.success(f"Total Monthly Expenses: ${total_expenses:.2f}")
 
 # --- Debts ---
 st.header("💳 Debts")
-num_debts   = st.number_input("How many debts?", min_value=1, max_value=50, step=1, key="num_debts")
+num_debts = st.number_input("How many debts?", min_value=1, max_value=50, step=1, key="num_debts")
 st.caption("Enter each debt’s name, payment, and balance:")
 
 debts = []
@@ -113,28 +130,29 @@ for i in range(int(num_debts)):
     months = math.ceil(owed / pay) if pay > 0 else 0
     debts.append({"Item": name, "Monthly Payment": pay, "Total Owed": owed, "Payoff Months": months})
 
-debt_df          = pd.DataFrame(debts)
+debt_df = pd.DataFrame(debts)
 monthly_debt_total = debt_df["Monthly Payment"].sum()
 
-# --- Summary DataFrame (two-column layout) ---
+# --- Summary ---
+st.header("📊 Summary")
 total_outflow = total_expenses + monthly_debt_total
 discretionary = monthly_income - total_outflow
 dti           = (total_outflow / monthly_income * 100) if monthly_income else 0
 
-summary_df = pd.DataFrame({
-    "Metric": [
-        "Monthly Income",
-        "Total Monthly Outflow",
-        "Debt-to-Income Ratio",
-        "Discretionary Income"
-    ],
-    "Value": [
-        f"${monthly_income:,.2f}",
-        f"${total_outflow:,.2f}",
-        f"{dti:.2f}%",
-        f"${discretionary:,.2f}"
-    ]
-})
+# prepare summary dict for Excel sheet
+summary = {
+    "Monthly Income": f"${monthly_income:,.2f}",
+    "Total Outflow":   f"${total_outflow:,.2f}",
+    "Debt-to-Income":  f"{dti:.2f}%",
+    "Discretionary":   f"${discretionary:,.2f}"
+}
+
+st.markdown(f"""
+- ✅ **Monthly Income:** {summary["Monthly Income"]}  
+- ✅ **Total Monthly Outflow:** {summary["Total Outflow"]}  
+- ✅ **Debt-to-Income Ratio:** {summary["Debt-to-Income"]}  
+- ✅ **Discretionary Income:** {summary["Discretionary"]}
+""")
 
 # --- Strategy & Timeline ---
 st.subheader("📌 Payoff Strategy & Timeline")
@@ -145,40 +163,27 @@ if len(debts) > 1:
     else:
         strat, note = "Avalanche", "Targets high-interest debts to save money."
     st.info(f"**Strategy:** {strat} — {note}")
-    st.table(debt_df[["Item","Payoff Months"]])
+    st.table(debt_df[["Item", "Payoff Months"]])
 else:
     st.warning("Enter at least 2 debts for a strategy recommendation.")
 
-# --- Expense Breakdown Table ---
+# --- Expense Breakdown Table (filter out items < $0.20) ---
 st.subheader("📈 Expense Breakdown Table")
 expense_df = pd.DataFrame({
     "Category": list(expenses.keys()),
     "Amount ($)": list(expenses.values())
 })
-if total_expenses > 0:
+expense_df = expense_df[expense_df["Amount ($)"] >= 0.20]
+
+if not expense_df.empty:
     expense_df["% of Expense"] = (expense_df["Amount ($)"] / total_expenses * 100).round(1).astype(str) + "%"
     expense_df["% of Income"]  = (expense_df["Amount ($)"] / monthly_income * 100).round(1).astype(str) + "%"
     st.dataframe(expense_df.sort_values("Amount ($)", ascending=False).reset_index(drop=True))
 else:
-    st.warning("No expenses to display.")
-
-# --- Helper function for Excel export (with Summary) ---
-def export_excel(expenses_df, debts_df, summary_df):
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        expenses_df.to_excel(writer, sheet_name='Expenses', index=False)
-        debts_df.to_excel(writer, sheet_name='Debts', index=False)
-        summary_df.to_excel(writer, sheet_name='Summary', index=False)
-    data = buffer.getvalue()
-    st.download_button(
-        label="📥 Download Excel Report",
-        data=data,
-        file_name="BudgetMap_Report.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    st.warning("No expenses ≥ $0.20 to display.")
 
 # --- Export ---
-export_excel(expense_df, debt_df, summary_df)
+export_excel(expense_df, debt_df, summary)
 
 # --- Footer ---
 st.markdown("---")
